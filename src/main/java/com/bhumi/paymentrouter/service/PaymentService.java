@@ -10,6 +10,8 @@ import com.bhumi.paymentrouter.gateway.GatewayRouter;
 import com.bhumi.paymentrouter.repository.PaymentRepository;
 import com.bhumi.paymentrouter.dto.UpdatePaymentStatusRequest;
 import com.bhumi.paymentrouter.dto.PaymentStatsResponse;
+import com.bhumi.paymentrouter.kafka.PaymentProducer;
+import com.bhumi.paymentrouter.kafka.PaymentEvent;
 
 import org.springframework.stereotype.Service;
 
@@ -20,13 +22,16 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final GatewayRouter gatewayRouter;
+    private final PaymentProducer paymentProducer;
 
     public PaymentService(
-            PaymentRepository paymentRepository,
-            GatewayRouter gatewayRouter) {
+        PaymentRepository paymentRepository,
+        GatewayRouter gatewayRouter,
+        PaymentProducer paymentProducer) {
 
-        this.paymentRepository = paymentRepository;
-        this.gatewayRouter = gatewayRouter;
+    this.paymentRepository = paymentRepository;
+    this.gatewayRouter = gatewayRouter;
+    this.paymentProducer = paymentProducer;
     }
 
     public Payment createPayment(CreatePaymentRequest request) {
@@ -46,7 +51,16 @@ public class PaymentService {
         payment.setCreatedAt(LocalDateTime.now());
         payment.setUpdatedAt(LocalDateTime.now());
 
-        return paymentRepository.save(payment);
+        Payment savedPayment = paymentRepository.save(payment);
+
+        paymentProducer.publish(
+            new PaymentEvent(
+                savedPayment.getId(),
+                savedPayment.getOrderId()
+            )
+        );
+
+        return savedPayment;
     }
     public List<Payment> getAllPayments() {
         return paymentRepository.findAll();
