@@ -1,43 +1,108 @@
 package com.bhumi.paymentrouter.service;
 
+import java.util.List;
+
+import com.bhumi.paymentrouter.exception.PaymentNotFoundException;
 import com.bhumi.paymentrouter.dto.CreatePaymentRequest;
 import com.bhumi.paymentrouter.entity.Payment;
-import com.bhumi.paymentrouter.entity.PaymentGateway;
 import com.bhumi.paymentrouter.entity.PaymentStatus;
 import com.bhumi.paymentrouter.gateway.GatewayRouter;
+import com.bhumi.paymentrouter.repository.PaymentRepository;
+import com.bhumi.paymentrouter.dto.UpdatePaymentStatusRequest;
+import com.bhumi.paymentrouter.dto.PaymentStatsResponse;
 
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class PaymentService {
 
-    private final AtomicLong counter = new AtomicLong(1);
-
+    private final PaymentRepository paymentRepository;
     private final GatewayRouter gatewayRouter;
 
-    public PaymentService(GatewayRouter gatewayRouter) {
-    this.gatewayRouter = gatewayRouter;
-}
+    public PaymentService(
+            PaymentRepository paymentRepository,
+            GatewayRouter gatewayRouter) {
+
+        this.paymentRepository = paymentRepository;
+        this.gatewayRouter = gatewayRouter;
+    }
 
     public Payment createPayment(CreatePaymentRequest request) {
 
         Payment payment = new Payment();
 
-        payment.setId(counter.getAndIncrement());
         payment.setOrderId(request.getOrderId());
         payment.setAmount(request.getAmount());
         payment.setCurrency(request.getCurrency());
 
         payment.setStatus(PaymentStatus.PENDING);
+
         payment.setGateway(
-            gatewayRouter.selectGateway(request.getAmount())
+                gatewayRouter.selectGateway(request.getAmount())
         );
+
         payment.setCreatedAt(LocalDateTime.now());
         payment.setUpdatedAt(LocalDateTime.now());
 
-        return payment;
+        return paymentRepository.save(payment);
+    }
+    public List<Payment> getAllPayments() {
+        return paymentRepository.findAll();
+    }
+
+    public Payment getPaymentById(Long id) {
+        return paymentRepository.findById(id)
+            .orElseThrow(() -> new PaymentNotFoundException(id));
+    }
+    public Payment updatePaymentStatus(
+        Long id,
+        UpdatePaymentStatusRequest request) {
+
+        Payment payment = paymentRepository.findById(id)
+            .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        payment.setStatus(request.getStatus());
+        payment.setUpdatedAt(LocalDateTime.now());
+
+        return paymentRepository.save(payment);
+    }
+
+    public PaymentStatsResponse getPaymentStats() {
+
+    List<Payment> payments = paymentRepository.findAll();
+
+    PaymentStatsResponse stats = new PaymentStatsResponse();
+
+    stats.setTotalPayments(payments.size());
+
+    stats.setSuccessPayments(
+            payments.stream()
+                    .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
+                    .count()
+    );
+
+    stats.setFailedPayments(
+            payments.stream()
+                    .filter(p -> p.getStatus() == PaymentStatus.FAILED)
+                    .count()
+    );
+
+    stats.setPendingPayments(
+            payments.stream()
+                    .filter(p -> p.getStatus() == PaymentStatus.PENDING)
+                    .count()
+    );
+
+        return stats;
+    }
+
+    public void deletePayment(Long id) {
+
+        Payment payment = paymentRepository.findById(id)
+            .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        paymentRepository.delete(payment);
     }
 }
