@@ -33,19 +33,19 @@ function App() {
   const loadData = () => {
 
     axios
-      .get("http://localhost:8080/dashboard")
+      .get("https://smart-payment-router-1.onrender.com/dashboard")
       .then((res) => setStats(res.data));
 
     axios
-      .get("http://localhost:8080/dashboard/recent")
+      .get("https://smart-payment-router-1.onrender.com/dashboard/recent")
       .then((res) => setPayments(res.data));
 
     axios
-      .get("http://localhost:8080/dashboard/dlq-count")
+      .get("https://smart-payment-router-1.onrender.com/dashboard/dlq-count")
       .then((res) => setDlq(res.data));
 
     axios
-      .get("http://localhost:8080/dashboard/cache")
+      .get("https://smart-payment-router-1.onrender.com/dashboard/cache")
       .then((res) => setCache(res.data));
 
   };
@@ -67,7 +67,7 @@ function App() {
     try {
 
       await axios.post(
-        "http://localhost:8080/payments",
+        "https://smart-payment-router-1.onrender.com/payments",
         {
           orderId,
           amount,
@@ -120,7 +120,7 @@ function App() {
 
     const response =
       await axios.get(
-        `http://localhost:8080/payments/search/${searchOrderId}`
+        `https://smart-payment-router-1.onrender.com/payments/search/${searchOrderId}`
       );
 
     console.log(response.data);
@@ -148,7 +148,7 @@ const updateStatus = async (id, status) => {
   try {
 
     await axios.put(
-      `http://localhost:8080/payments/${id}/status`,
+      `https://smart-payment-router-1.onrender.com/payments/${id}/status`,
       {
         status
       }
