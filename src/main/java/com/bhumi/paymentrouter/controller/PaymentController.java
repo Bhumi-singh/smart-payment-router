@@ -57,4 +57,11 @@ public class PaymentController {
 
         return "Payment deleted successfully";
     }
+
+    @GetMapping("/search/{orderId}")
+    public List<Payment> searchPayment(
+        @PathVariable String orderId) {
+
+        return paymentService.findByOrderId(orderId);
+    }
 }

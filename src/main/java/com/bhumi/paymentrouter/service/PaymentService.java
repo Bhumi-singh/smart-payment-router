@@ -3,6 +3,7 @@ package com.bhumi.paymentrouter.service;
 import java.util.List;
 
 import com.bhumi.paymentrouter.exception.PaymentNotFoundException;
+import com.bhumi.paymentrouter.dto.CacheStatusResponse;
 import com.bhumi.paymentrouter.dto.CreatePaymentRequest;
 import com.bhumi.paymentrouter.entity.Payment;
 import com.bhumi.paymentrouter.entity.PaymentStatus;
@@ -31,6 +32,7 @@ public class PaymentService {
     private final GatewayRouter gatewayRouter;
     private final PaymentProducer paymentProducer;
     private final RedisTemplate<String, Object> redisTemplate;
+    private int dlqCount = 0;
 
     public PaymentService(
         PaymentRepository paymentRepository,
@@ -42,6 +44,19 @@ public class PaymentService {
     this.gatewayRouter = gatewayRouter;
     this.paymentProducer = paymentProducer;
     this.redisTemplate = redisTemplate;
+    }
+
+    public List<Payment> findByOrderId(String orderId) {
+
+        return paymentRepository.findByOrderId(orderId);
+    }
+
+    public void incrementDlqCount() {
+        dlqCount++;
+    }   
+
+    public int getDlqCount() {
+        return dlqCount;
     }
 
     public DashboardResponse getDashboard() {
@@ -159,6 +174,16 @@ public class PaymentService {
         redisTemplate.opsForValue().set(key, payment);
 
         return payment;
+    }
+
+    public CacheStatusResponse getCacheStatus() {
+
+        CacheStatusResponse response =
+            new CacheStatusResponse();
+
+        response.setRedis("UP");
+
+        return response;
     }
     public Payment updatePaymentStatus(
         Long id,
