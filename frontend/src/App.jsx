@@ -144,6 +144,7 @@ function App() {
 
 };
 const updateStatus = async (id, status) => {
+
   try {
 
     await axios.put(
@@ -155,9 +156,17 @@ const updateStatus = async (id, status) => {
 
     loadData();
 
+    if (
+      searchResult &&
+      searchResult.id === id
+    ) {
+      searchPayment();
+    }
+
   } catch (error) {
     console.error(error);
   }
+
 };
 
   return (
