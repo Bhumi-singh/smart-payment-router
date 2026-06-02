@@ -12,6 +12,13 @@ import com.bhumi.paymentrouter.dto.UpdatePaymentStatusRequest;
 import com.bhumi.paymentrouter.dto.PaymentStatsResponse;
 import com.bhumi.paymentrouter.kafka.PaymentProducer;
 import com.bhumi.paymentrouter.kafka.PaymentEvent;
+import org.springframework.data.redis.core.RedisTemplate;
+import com.bhumi.paymentrouter.dto.DashboardResponse;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.PageRequest;
+
+import com.bhumi.paymentrouter.dto.RecentPaymentResponse;
 
 import org.springframework.stereotype.Service;
 
@@ -23,16 +30,81 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final GatewayRouter gatewayRouter;
     private final PaymentProducer paymentProducer;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public PaymentService(
         PaymentRepository paymentRepository,
         GatewayRouter gatewayRouter,
-        PaymentProducer paymentProducer) {
+        PaymentProducer paymentProducer,
+        RedisTemplate<String, Object> redisTemplate) {
 
     this.paymentRepository = paymentRepository;
     this.gatewayRouter = gatewayRouter;
     this.paymentProducer = paymentProducer;
+    this.redisTemplate = redisTemplate;
     }
+
+    public DashboardResponse getDashboard() {
+
+    DashboardResponse response =
+            new DashboardResponse();
+
+    long total =
+            paymentRepository.count();
+
+    long success =
+            paymentRepository.countByStatus(
+                    PaymentStatus.SUCCESS);
+
+    long failed =
+            paymentRepository.countByStatus(
+                    PaymentStatus.FAILED);
+
+    long pending =
+            paymentRepository.countByStatus(
+                    PaymentStatus.PENDING);
+
+    double successRate = 0;
+
+    if (total > 0) {
+        successRate =
+                (success * 100.0) / total;
+    }
+
+    response.setTotalPayments(total);
+    response.setSuccessPayments(success);
+    response.setFailedPayments(failed);
+    response.setPendingPayments(pending);
+    response.setSuccessRate(Math.round(successRate * 100.0) / 100.0);
+
+    return response;
+    }
+
+    public List<RecentPaymentResponse> getRecentPayments() {
+
+    return paymentRepository
+            .findAllByOrderByCreatedAtDesc(
+                    PageRequest.of(0, 10))
+            .stream()
+            .map(payment -> {
+
+                RecentPaymentResponse response =
+                        new RecentPaymentResponse();
+
+                response.setId(payment.getId());
+                response.setOrderId(
+                        payment.getOrderId());
+
+                response.setAmount(
+                        payment.getAmount());
+
+                response.setStatus(
+                        payment.getStatus().name());
+
+                return response;
+
+            }).collect(Collectors.toList());
+}
 
     public Payment createPayment(CreatePaymentRequest request) {
 
@@ -67,8 +139,26 @@ public class PaymentService {
     }
 
     public Payment getPaymentById(Long id) {
-        return paymentRepository.findById(id)
-            .orElseThrow(() -> new PaymentNotFoundException(id));
+
+        String key = "payment:" + id;
+
+        Payment cachedPayment =
+            (Payment) redisTemplate.opsForValue().get(key);
+            if (cachedPayment != null) {
+            System.out.println("FROM REDIS");
+            return cachedPayment;
+        }
+
+        System.out.println("FROM POSTGRES");
+
+        Payment payment =
+            paymentRepository.findById(id)
+                    .orElseThrow(() ->
+                            new PaymentNotFoundException(id));
+
+        redisTemplate.opsForValue().set(key, payment);
+
+        return payment;
     }
     public Payment updatePaymentStatus(
         Long id,

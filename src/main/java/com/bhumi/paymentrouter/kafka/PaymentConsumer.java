@@ -10,62 +10,116 @@ import com.bhumi.paymentrouter.entity.Payment;
 import com.bhumi.paymentrouter.entity.PaymentStatus;
 import com.bhumi.paymentrouter.repository.PaymentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.bhumi.paymentrouter.kafka.DLQProducer;
 
 @Service
 public class PaymentConsumer {
 
     private final PaymentRepository paymentRepository;
     private final ObjectMapper objectMapper;
+    private final DLQProducer dlqProducer;
 
     public PaymentConsumer(
-            PaymentRepository paymentRepository,
-            ObjectMapper objectMapper) {
+        PaymentRepository paymentRepository,
+        ObjectMapper objectMapper,
+        DLQProducer dlqProducer) {
 
-        this.paymentRepository = paymentRepository;
-        this.objectMapper = objectMapper;
+    this.paymentRepository = paymentRepository;
+    this.objectMapper = objectMapper;
+    this.dlqProducer = dlqProducer;
     }
 
     @KafkaListener(
-            topics = "payments",
-            groupId = "payment-group")
-    public void consume(String message) {
+        topics = "payments",
+        groupId = "payment-group")
+public void consume(String message) {
 
-        try {
+    try {
 
-            PaymentEvent event =
-                    objectMapper.readValue(message, PaymentEvent.class);
+        PaymentEvent event =
+            objectMapper.readValue(message, PaymentEvent.class);  
 
-            System.out.println(
-                    "Processing payment : "
-                            + event.getPaymentId());
+        System.out.println(
+                "Processing payment : "
+                        + event.getPaymentId());
 
-            Thread.sleep(3000);
+        Payment payment =
+                paymentRepository.findById(event.getPaymentId())
+                        .orElseThrow();
 
-            Payment payment =
-                    paymentRepository.findById(event.getPaymentId())
-                            .orElseThrow();
+        boolean processed = false;
+        int retryCount = 0;
+        int maxRetries = 3;
 
-            boolean success =
-                    new Random().nextBoolean();
+        while (!processed && retryCount < maxRetries) {
 
-            if (success) {
-                payment.setStatus(PaymentStatus.SUCCESS);
-            } else {
-                payment.setStatus(PaymentStatus.FAILED);
+            try {
+
+                retryCount++;
+
+                System.out.println(
+                        "Attempt "
+                                + retryCount
+                                + " for payment "
+                                + payment.getId());
+
+                Thread.sleep(2000);
+
+                boolean gatewaySuccess =
+                        new Random().nextInt(100) < 70;
+
+                if (!gatewaySuccess) {
+                    throw new RuntimeException(
+                            "Gateway timeout");
+                }
+
+                payment.setStatus(
+                        PaymentStatus.SUCCESS);
+
+                payment.setUpdatedAt(
+                        LocalDateTime.now());
+
+                paymentRepository.save(payment);
+
+                System.out.println(
+                        "Payment "
+                                + payment.getId()
+                                + " SUCCESS");
+
+                processed = true;
+
+            } catch (Exception e) {
+
+                System.out.println(
+                        "Retry "
+                                + retryCount
+                                + " failed");
+
+                if (retryCount == maxRetries) {
+
+                    payment.setStatus(
+                            PaymentStatus.FAILED);
+
+                    payment.setUpdatedAt(
+                            LocalDateTime.now());
+
+                    paymentRepository.save(payment);
+
+                    System.out.println(
+                            "Payment "
+                                    + payment.getId()
+                                    + " FAILED after "
+                                    + maxRetries
+                                    + " retries");
+                }
             }
+        }
 
-            payment.setUpdatedAt(LocalDateTime.now());
+    } catch (Exception e) {
 
-            paymentRepository.save(payment);
-
-            System.out.println(
-                    "Payment "
-                            + payment.getId()
-                            + " -> "
-                            + payment.getStatus());
-
-        } catch (Exception e) {
-            e.printStackTrace();
+        System.out.println("Processing failed.");
+        dlqProducer.sendToDLQ(message);
+        e.printStackTrace();
         }
     }
 }
