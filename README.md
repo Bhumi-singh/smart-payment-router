@@ -277,19 +277,3 @@ http://localhost:5173
 - Full Stack Application Development
 
 ---
-
-## Author
-
-Bhumi Singh
-
-GitHub:
-https://github.com/YOUR-USERNAME
-
-LinkedIn:
-https://www.linkedin.com/in/YOUR-LINKEDIN
-
----
-
-## License
-
-This project is created for educational and portfolio purposes.
